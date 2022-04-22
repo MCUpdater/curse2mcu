@@ -2,13 +2,17 @@ package mcu
 
 import (
 	"archive/zip"
+	cryptoMd5 "crypto/md5"
 	"encoding/json"
 	"encoding/xml"
 	"fmt"
 	"github.com/mcupdater/curse2mcu/pkg/mcu/schema"
+	"io"
+	"io/fs"
 	"io/ioutil"
 	"log"
 	"os"
+	"path/filepath"
 	"strings"
 )
 
@@ -101,28 +105,63 @@ func ImportPackage(in string, out string) error {
 	}
 
 	// iterate over mods
-	log.Printf("Processing %v mods...", len(manifest.Files))
-	for i, file := range manifest.Files {
-		mod, e := GetCurseModule(file)
-		if e != nil {
-			fmt.Println("!")
-			return e
-		}
-		fmt.Print(".")
-		if i > 0 && i%10 == 0 {
-			if i%50 == 0 {
-				fmt.Println()
-			} else {
-				fmt.Print(" ")
+	/*
+		log.Printf("Processing %v mods...", len(manifest.Files))
+		for i, file := range manifest.Files {
+			mod, e := GetCurseModule(file)
+			if e != nil {
+				fmt.Println("!")
+				return e
 			}
+			fmt.Print(".")
+			if i > 0 && i%10 == 0 {
+				if i%50 == 0 {
+					fmt.Println()
+				} else {
+					fmt.Print(" ")
+				}
+			}
+			server.Module = append(server.Module, mod)
 		}
-		server.Module = append(server.Module, mod)
-	}
-	fmt.Println()
+		fmt.Println()
+	*/
 
 	// TODO: create override zip if necessary
 	if manifest.Overrides != "" {
-		log.Printf("Warning: 'overrides' detected, but extraction is not yet implemented, so this pack will be incomplete")
+		or, e := BuildOverrideZip(manifest.Overrides, zh.File)
+		if e != nil {
+			log.Printf("Warning: Failed to package override zip, serverpack will be incomplete.")
+			return e
+		} else {
+			// compute md5 and size of override zip
+			size := int64(0)
+			md5 := ""
+
+			orFileName := manifest.Overrides + ".zip"
+			stat, err := os.Stat(orFileName)
+			if err != nil {
+				log.Printf("Failed to stat final zip for size")
+			} else {
+				size = stat.Size()
+			}
+
+			orFileH, err := os.Open(orFileName)
+			if err != nil {
+				log.Printf("Failed to open final zip for md5")
+			} else {
+				hash := cryptoMd5.New()
+				_, err = io.Copy(hash, orFileH)
+				md5 = fmt.Sprintf("%x", hash.Sum(nil))
+				_ = orFileH.Close()
+			}
+
+			or.Size = size
+			or.MD5 = md5
+			log.Printf("md5 = %v, size = %d", md5, size)
+
+			log.Printf("Note: You will need to provide this zip file, and edit your xml to provide its correct url.")
+			server.Module = append(server.Module, or)
+		}
 	}
 
 	// create output xml file
@@ -154,4 +193,143 @@ func ImportPackage(in string, out string) error {
 	}
 
 	return nil
+}
+
+func BuildOverrideZip(prefix string, zipFiles []*zip.File) (*schema.ModuleType, error) {
+	dir, err := os.MkdirTemp(tmpDir, "or_tmp_*")
+	if err != nil {
+		log.Printf("Failed to create tempdir to work on override zip.")
+		return nil, err
+	}
+	defer func() {
+		_ = os.RemoveAll(dir)
+	}()
+
+	// extract all override files
+	log.Printf("Processing %d potential override files...", len(zipFiles))
+	prefixDir := prefix + "/"
+	count := 0
+	for i, f := range zipFiles {
+		if f.FileInfo().IsDir() {
+			continue
+		}
+		if strings.HasPrefix(f.Name, prefixDir) {
+			// we have a candidate
+			tmpName := strings.TrimPrefix(f.Name, prefixDir)
+			tmpFile := filepath.Join(dir, tmpName)
+			_ = os.MkdirAll(filepath.Dir(tmpFile), 0755)
+			if tmpH, e := os.Create(tmpFile); e != nil {
+				fmt.Print("!")
+			} else {
+				// yes, this is ugly nested, but we can't use defers for cleanup
+				// because we're in a loop - could break these out into multiple
+				// subroutines, but that feels even dirtier
+				r, e := f.Open()
+				if e != nil {
+					fmt.Print("!")
+				} else {
+					buf, e := ioutil.ReadAll(r)
+					if e != nil {
+						fmt.Print("!")
+					} else if _, e = tmpH.Write(buf); e != nil {
+						fmt.Print("!")
+					} else {
+						// success!
+						fmt.Print("+")
+						count++
+					}
+					_ = r.Close()
+				}
+				_ = tmpH.Close()
+			}
+		} else {
+			fmt.Print(".")
+		}
+		if i > 0 && i%10 == 0 {
+			if i%50 == 0 {
+				fmt.Println()
+			} else {
+				fmt.Print(" ")
+			}
+		}
+	}
+	fmt.Println()
+
+	// zip them all into a new bundle
+	orZip, err := os.Create(prefix + ".zip")
+	if err != nil {
+		log.Printf("Failed to create override zip file")
+		return nil, err
+	}
+	defer func() {
+		_ = orZip.Close()
+	}()
+
+	zipWriter := zip.NewWriter(orZip)
+	defer func() {
+		// don't know if we actually need to close this - but it doesn't hurt
+		_ = zipWriter.Close()
+	}()
+
+	log.Printf("Packaging %d files into %v...", count, orZip.Name())
+	tmpAbs, _ := filepath.Abs(dir)
+	if err = filepath.WalkDir(tmpAbs,
+		func(path string, d fs.DirEntry, e error) error {
+			return AddFileToZip(zipWriter, path)
+		},
+	); err != nil {
+		log.Printf("Failed to walk tmp dir")
+		return nil, err
+	}
+
+	// NB: computing the size and md5 of this zip here does not seem to work.
+	//     we get realistic answers - but not accurate ones. this is likely
+	//     the result of not closing and re-loading the file, which we will do
+	//     outside this function instead.
+	/*
+		// compute size and m5 of zip
+		_ = orZip.Sync()
+		_, _ = orZip.Seek(0, 0)
+
+		stat, err := os.Stat(orZip.Name())
+		if err != nil {
+			log.Printf("Failed to stat final zip")
+			return nil, err
+		}
+		size := stat.Size()
+
+		hash := md52.New()
+		_, err = io.Copy(hash, orZip)
+		md5 := fmt.Sprintf("%x", hash.Sum(nil))
+	*/
+
+	// construct the mod entry
+	url, err := filepath.Abs(orZip.Name())
+	if err != nil {
+		log.Printf("Failed to determine path to override zip?!")
+		return nil, err
+	} else {
+		log.Printf("Wrote override zip: %v", url)
+	}
+	mod := &schema.ModuleType{
+		ModuleGenericType: &schema.ModuleGenericType{
+			NameAttr: "Overrides",
+			IdAttr:   "overrides",
+			SideAttr: "BOTH",
+			ModType: &schema.ModType{
+				ModEnum:    &schema.ModTypeExtract,
+				InRootAttr: true,
+			},
+			URL: []*schema.URL{
+				&schema.URL{
+					Value: "file:/" + url,
+				},
+			},
+			Required: &schema.Required{
+				Value:         true,
+				IsDefaultAttr: true,
+			},
+		},
+	}
+	return mod, nil
 }

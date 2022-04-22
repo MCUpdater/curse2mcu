@@ -1,13 +1,16 @@
 package mcu
 
 import (
+	"archive/zip"
 	"crypto/md5"
 	"errors"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
 )
 
 const (
@@ -42,6 +45,47 @@ func FileExists(name string) bool {
 		log.Printf("unable to test file %q, err = %v", name, err)
 		return false
 	}
+}
+
+func AddFileToZip(zipWriter *zip.Writer, name string) error {
+	// open our source file
+	file, err := os.Open(name)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		_ = file.Close()
+	}()
+
+	// build file header
+	info, err := file.Stat()
+	if err != nil {
+		return err
+	}
+	if info.IsDir() {
+		return nil
+	}
+	header, err := zip.FileInfoHeader(info)
+	if err != nil {
+		return err
+	}
+
+	// set correct method, based on filetype
+	ext := filepath.Ext(name)
+	if ext == ".zip" || ext == ".jar" {
+		header.Method = zip.Store
+	} else {
+		header.Method = zip.Deflate
+	}
+
+	// write file entry
+	writer, err := zipWriter.CreateHeader(header)
+	if err != nil {
+		return err
+	}
+
+	_, err = io.Copy(writer, file)
+	return err
 }
 
 // DownloadFile fetches the contents of a url to a temporary file and returns a
