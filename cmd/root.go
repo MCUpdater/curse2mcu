@@ -1,9 +1,8 @@
 package cmd
 
 import (
-	_ "archive/zip"
-	"curse-importer/pkg/mcu"
 	"fmt"
+	"github.com/mcupdater/curse2mcu/pkg/mcu"
 	"github.com/spf13/cobra"
 	"log"
 	"os"

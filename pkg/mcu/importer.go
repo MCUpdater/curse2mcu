@@ -3,9 +3,15 @@ package mcu
 import (
 	"archive/zip"
 	"encoding/json"
+	"encoding/xml"
 	"fmt"
+	"github.com/go-xmlfmt/xmlfmt"
+	"github.com/mcupdater/curse2mcu/pkg/mcu/schema"
 	"io/ioutil"
 	"log"
+	"os"
+	"strconv"
+	"strings"
 )
 
 // ImportPackage is the main entry point into the actual process.
@@ -49,12 +55,107 @@ func ImportPackage(in string, out string) error {
 	} else {
 		log.Printf("Read manifest.json from zip")
 	}
-	var manifest map[string]interface{}
+	var manifest schema.CurseManifest
 	if e = json.Unmarshal(buf, &manifest); e != nil {
 		log.Printf("Manifest does not contain valid json")
 		return e
 	} else {
 		log.Printf("Successfully parsed manifest json")
+	}
+
+	// TODO: validate manifest
+
+	// start creating our serverpack in memory
+	var server = &schema.ServerType{
+		IdAttr:        "curse2mcu",
+		NameAttr:      manifest.Name,
+		RevisionAttr:  manifest.Version,
+		VersionAttr:   manifest.Minecraft.Version,
+		MainClassAttr: schema.MainClass,
+	}
+	var sp = schema.ServerPack{
+		VersionAttr: schema.ServerPackSchemaVersion,
+		Server: []*schema.ServerType{
+			server,
+		},
+	}
+
+	// set up header
+	// NB: atm, we only support forge
+	for i, ml := range manifest.Minecraft.ModLoaders {
+		mlId := strings.Split(ml.ID, "-")
+		if len(mlId) != 2 {
+			log.Printf("Failed to parse mod loader %q, skipping", ml.ID)
+		} else if mlId[0] != "forge" {
+			log.Printf("Got unsupported mod loader type %q, skipping", mlId[0])
+		} else {
+			if ml.Primary && i != 0 {
+				log.Printf("Warning: 'primary' mod loader %q is not listed first", ml.ID)
+			}
+			// we've got a forge version, make the entry
+			loader := &schema.LoaderType{
+				TypeAttr:      "Forge",
+				VersionAttr:   manifest.Minecraft.Version + "-" + mlId[1],
+				LoadOrderAttr: i,
+			}
+			server.Loader = append(server.Loader, loader)
+		}
+	}
+
+	// iterate over mods
+	for _, file := range manifest.Files {
+		// TODO: divine names and id's from curse
+		modName := strconv.Itoa(file.ProjectID)
+		modId := "curse_" + modName
+		mod := &schema.ModuleType{
+			ModuleGenericType: &schema.ModuleGenericType{
+				NameAttr: modName,
+				IdAttr:   modId,
+				Curse: &schema.Curse{
+					ProjectAttr: strconv.Itoa(file.ProjectID),
+					FileAttr:    file.FileID,
+				},
+				Required: &schema.Required{
+					Value:         file.Required,
+					IsDefaultAttr: true,
+				},
+			},
+		}
+		server.Module = append(server.Module, mod)
+	}
+
+	// TODO: create override zip if necessary
+	if manifest.Overrides != "" {
+		log.Printf("Warning: 'overrides' detected, but extraction is not yet implemented, so this pack will be incomplete")
+	}
+
+	// create output xml file
+	sph, e := os.Create(out)
+	if e != nil {
+		log.Printf("Failed to create output xml at %q\n", out)
+		return e
+	}
+	defer func() {
+		_ = sph.Close()
+	}()
+	if _, e = sph.WriteString(xml.Header); e != nil {
+		log.Printf("Failed to write xml header")
+		return e
+	}
+
+	// dump our in-memory xml to the file
+	buf, e = xml.Marshal(sp)
+	if e != nil {
+		log.Printf("Failed to convert in-memory serverpack to xml")
+		return e
+	}
+
+	x := xmlfmt.FormatXML(string(buf), "", "\t")
+	if n, e := sph.WriteString(x); e != nil {
+		log.Printf("Failed to write results to xml file")
+		return e
+	} else {
+		log.Printf("Successfully wrote %v bytes to %q", n, out)
 	}
 
 	return nil

@@ -1,6 +1,6 @@
 package main
 
-import "curse-importer/cmd"
+import "github.com/mcupdater/curse2mcu/cmd"
 
 func main() {
 	cmd.Execute()
