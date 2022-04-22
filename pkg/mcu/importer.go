@@ -105,28 +105,26 @@ func ImportPackage(in string, out string) error {
 	}
 
 	// iterate over mods
-	/*
-		log.Printf("Processing %v mods...", len(manifest.Files))
-		for i, file := range manifest.Files {
-			mod, e := GetCurseModule(file)
-			if e != nil {
-				fmt.Println("!")
-				return e
-			}
-			fmt.Print(".")
-			if i > 0 && i%10 == 0 {
-				if i%50 == 0 {
-					fmt.Println()
-				} else {
-					fmt.Print(" ")
-				}
-			}
-			server.Module = append(server.Module, mod)
+	log.Printf("Processing %v mods...", len(manifest.Files))
+	for i, file := range manifest.Files {
+		mod, e := GetCurseModule(file)
+		if e != nil {
+			fmt.Println("!")
+			return e
 		}
-		fmt.Println()
-	*/
+		fmt.Print(".")
+		if i > 0 && i%10 == 0 {
+			if i%50 == 0 {
+				fmt.Println()
+			} else {
+				fmt.Print(" ")
+			}
+		}
+		server.Module = append(server.Module, mod)
+	}
+	fmt.Println()
 
-	// TODO: create override zip if necessary
+	// create override zip if necessary
 	if manifest.Overrides != "" {
 		or, e := BuildOverrideZip(manifest.Overrides, zh.File)
 		if e != nil {
