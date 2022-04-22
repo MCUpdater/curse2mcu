@@ -15,11 +15,13 @@ type CurseManifest struct {
 	Version         string `json:"version"`
 	Author          string `json:"author"`
 
-	Files []struct {
-		ProjectID int  `json:"projectID"`
-		FileID    int  `json:"fileID"`
-		Required  bool `json:"required"`
-	} `json:"files"`
+	Files []CurseFile `json:"files"`
 
 	Overrides string `json:"overrides"`
+}
+
+type CurseFile struct {
+	ProjectID int  `json:"projectID"`
+	FileID    int  `json:"fileID"`
+	Required  bool `json:"required"`
 }

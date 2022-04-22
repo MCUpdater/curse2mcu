@@ -9,7 +9,6 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
-	"strconv"
 	"strings"
 )
 
@@ -103,33 +102,19 @@ func ImportPackage(in string, out string) error {
 
 	// iterate over mods
 	log.Printf("Processing %v mods...", len(manifest.Files))
-	for _, file := range manifest.Files {
-		fmt.Print(".")
-		// TODO: divine names and id's from curse
-		url, e := GetCurseURL(file.ProjectID, file.FileID)
+	for i, file := range manifest.Files {
+		mod, e := GetCurseModule(file)
 		if e != nil {
+			fmt.Println("!")
 			return e
 		}
-
-		modName := strconv.Itoa(file.ProjectID)
-		modId := "curse_" + modName
-		mod := &schema.ModuleType{
-			ModuleGenericType: &schema.ModuleGenericType{
-				NameAttr: modName,
-				IdAttr:   modId,
-				ModType: &schema.ModType{
-					ModEnum: &schema.ModTypeRegular,
-				},
-				URL: []*schema.URL{
-					&schema.URL{
-						Value: url,
-					},
-				},
-				Required: &schema.Required{
-					Value:         file.Required,
-					IsDefaultAttr: true,
-				},
-			},
+		fmt.Print(".")
+		if i > 0 && i%10 == 0 {
+			if i%50 == 0 {
+				fmt.Println()
+			} else {
+				fmt.Print(" ")
+			}
 		}
 		server.Module = append(server.Module, mod)
 	}

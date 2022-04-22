@@ -85,8 +85,8 @@ type ModuleGenericType struct {
 	SideAttr    string    `xml:"side,attr,omitempty"`
 	URL         []*URL    `xml:"URL"`
 	Curse       *Curse    `xml:"Curse"`
-	LoadPrefix  string    `xml:"LoadPrefix"`
-	ModPath     string    `xml:"ModPath"`
+	LoadPrefix  string    `xml:"LoadPrefix,omitempty"`
+	ModPath     string    `xml:"ModPath,omitempty"`
 	Size        int64     `xml:"Size"`
 	Required    *Required `xml:"Required"`
 	ModType     *ModType  `xml:"ModType"`
