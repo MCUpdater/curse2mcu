@@ -272,10 +272,13 @@ func BuildOverrideZip(prefix string, zipFiles []*zip.File) (*schema.ModuleType, 
 	}()
 
 	log.Printf("Packaging %d files into %v...", count, orZip.Name())
-	tmpAbs, _ := filepath.Abs(dir)
-	if err = filepath.WalkDir(tmpAbs,
-		func(path string, d fs.DirEntry, e error) error {
-			return AddFileToZip(zipWriter, path)
+	//tmpAbs, _ := filepath.Abs(dir)
+	if err = filepath.WalkDir(dir,
+		func(file string, d fs.DirEntry, _ error) error {
+			if d.IsDir() {
+				return nil
+			}
+			return AddFileToZip(zipWriter, file, dir)
 		},
 	); err != nil {
 		log.Printf("Failed to walk tmp dir")

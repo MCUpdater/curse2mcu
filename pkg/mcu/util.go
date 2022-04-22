@@ -47,7 +47,7 @@ func FileExists(name string) bool {
 	}
 }
 
-func AddFileToZip(zipWriter *zip.Writer, name string) error {
+func AddFileToZip(zipWriter *zip.Writer, name string, dir string) error {
 	// open our source file
 	file, err := os.Open(name)
 	if err != nil {
@@ -69,6 +69,11 @@ func AddFileToZip(zipWriter *zip.Writer, name string) error {
 	if err != nil {
 		return err
 	}
+	relPath, err := filepath.Rel(dir, name)
+	if err != nil {
+		return err
+	}
+	header.Name = filepath.ToSlash(relPath)
 
 	// set correct method, based on filetype
 	ext := filepath.Ext(name)
