@@ -102,8 +102,15 @@ func ImportPackage(in string, out string) error {
 	}
 
 	// iterate over mods
+	log.Printf("Processing %v mods...", len(manifest.Files))
 	for _, file := range manifest.Files {
+		fmt.Print(".")
 		// TODO: divine names and id's from curse
+		url, e := GetCurseURL(file.ProjectID, file.FileID)
+		if e != nil {
+			return e
+		}
+
 		modName := strconv.Itoa(file.ProjectID)
 		modId := "curse_" + modName
 		mod := &schema.ModuleType{
@@ -113,9 +120,10 @@ func ImportPackage(in string, out string) error {
 				ModType: &schema.ModType{
 					ModEnum: &schema.ModTypeRegular,
 				},
-				Curse: &schema.Curse{
-					ProjectAttr: strconv.Itoa(file.ProjectID),
-					FileAttr:    file.FileID,
+				URL: []*schema.URL{
+					&schema.URL{
+						Value: url,
+					},
 				},
 				Required: &schema.Required{
 					Value:         file.Required,
@@ -125,6 +133,7 @@ func ImportPackage(in string, out string) error {
 		}
 		server.Module = append(server.Module, mod)
 	}
+	fmt.Println()
 
 	// TODO: create override zip if necessary
 	if manifest.Overrides != "" {
