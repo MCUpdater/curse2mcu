@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"encoding/xml"
 	"fmt"
-	"github.com/go-xmlfmt/xmlfmt"
 	"github.com/mcupdater/curse2mcu/pkg/mcu/schema"
 	"io/ioutil"
 	"log"
@@ -111,6 +110,9 @@ func ImportPackage(in string, out string) error {
 			ModuleGenericType: &schema.ModuleGenericType{
 				NameAttr: modName,
 				IdAttr:   modId,
+				ModType: &schema.ModType{
+					ModEnum: &schema.ModTypeRegular,
+				},
 				Curse: &schema.Curse{
 					ProjectAttr: strconv.Itoa(file.ProjectID),
 					FileAttr:    file.FileID,
@@ -144,14 +146,13 @@ func ImportPackage(in string, out string) error {
 	}
 
 	// dump our in-memory xml to the file
-	buf, e = xml.Marshal(sp)
+	buf, e = xml.MarshalIndent(sp, "", "\t")
 	if e != nil {
 		log.Printf("Failed to convert in-memory serverpack to xml")
 		return e
 	}
 
-	x := xmlfmt.FormatXML(string(buf), "", "\t")
-	if n, e := sph.WriteString(x); e != nil {
+	if n, e := sph.WriteString(string(buf)); e != nil {
 		log.Printf("Failed to write results to xml file")
 		return e
 	} else {

@@ -74,7 +74,7 @@ type ModType struct {
 	KeepMetaAttr   bool   `xml:"keepMeta,attr,omitempty"`
 	LaunchArgsAttr string `xml:"launchArgs,attr,omitempty"`
 	JreArgsAttr    string `xml:"jreArgs,attr,omitempty"`
-	*ModEnum
+	*ModEnum       `xml:",chardata"`
 }
 
 // ModuleGenericType ...
@@ -108,3 +108,8 @@ type MetaType struct {
 
 // ModEnum ...
 type ModEnum string
+
+var (
+	ModTypeRegular = ModEnum("Regular")
+	ModTypeExtract = ModEnum("Extract")
+)
